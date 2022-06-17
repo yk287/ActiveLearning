@@ -20,9 +20,7 @@ def main(opts):
     np.random.seed(opts.seed)
 
     al = activeLearner(opts)
-    al.train_model()
-
-    al.find_candidates()
+    al.AL_train()
 
     print('hello')
 

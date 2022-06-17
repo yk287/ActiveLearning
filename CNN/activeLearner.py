@@ -34,18 +34,18 @@ class activeLearner():
         ])
 
         # Download and load the training data
-        dataset = datasets.MNIST('MNIST_data/', download=True, train=True, transform=transform)
+        self.dataset = datasets.MNIST('MNIST_data/', download=True, train=True, transform=transform)
 
         # Split the indices in a stratified way
-        indices = np.arange(len(dataset))
-        self.train_indices, self.left_over_indices = train_test_split(indices, train_size=self.opts.initial_n, stratify=dataset.targets, random_state= self.opts.seed)
+        indices = np.arange(len(self.dataset))
+        self.train_indices, self.left_over_indices = train_test_split(indices, train_size=self.opts.initial_n, stratify=self.dataset.targets, random_state= self.opts.seed)
 
         # limit
         self.left_over_indices = self.left_over_indices[:self.opts.total_data]
 
         # Warp into Subsets and DataLoaders
-        self.train_dataset = torch.utils.data.Subset(dataset, self.train_indices)
-        self.left_over = torch.utils.data.Subset(dataset, self.left_over_indices)
+        self.train_dataset = torch.utils.data.Subset(self.dataset, self.train_indices)
+        self.left_over = torch.utils.data.Subset(self.dataset, self.left_over_indices)
 
     def init_dataloader(self):
         '''
@@ -58,32 +58,62 @@ class activeLearner():
 
     def update_indices(self):
 
-        print("h")
+        # find candidates that need to be labeled
+        self.find_candidates()
+
+        # update the dataloader
+        self.train_dataset = torch.utils.data.Subset(self.dataset, self.train_indices)
+        self.left_over = torch.utils.data.Subset(self.dataset, self.left_over_indices)
+
+    def AL_train(self):
+
+        for i in range(10):
+            # initial train
+            self.train_model()
+            # update the train and test indices by updating indices
+            self.update_indices()
+            # reload the dataloader
+            self.init_dataloader()
 
     def find_candidates(self):
 
-        # placeholder
-        results = torch.zeros((0))
+        if not self.opts.random_select:
+            # placeholder
+            results = torch.zeros((0))
 
-        for image, label in self.validloader:
+            for image, label in self.validloader:
 
-            # get the criteria for acquisition function.
-            result = self.model.n_dropout_max_entropy(image.to(device)).detach()
+                # get the criteria for acquisition function.
+                result = self.model.n_dropout_max_entropy(image.to(device)).detach()
 
-            # append the data
-            results = torch.concat((results, result.cpu()), dim = 0)
+                # append the data
+                results = torch.concat((results, result.cpu()), dim = 0)
 
-        # get a new set of candidates
-        self.candidate_indices = torch.argsort(results, descending=True)#[:self.opts.n_addition].tolist()
+            # get a new set of candidates
+            self.candidate_indices = torch.argsort(results, descending=True)#[:self.opts.n_addition].tolist()
+            self.candidate_indices = self.candidate_indices.tolist()[:self.opts.n_addition]
 
-        self.candidate_indices = self.candidate_indices.tolist()[:self.opts.n_addition]
+        else:
+
+            perm = torch.randperm(len(self.left_over_indices))
+            self.candidate_indices = perm[:self.opts.n_addition]
+
+            #self.candidate_indices = self.left_over_indices[idx]
+
 
         # candidate_indices represent the data that should be added to the train_dataset
         self.candidate_indices = self.left_over_indices[self.candidate_indices]
+
+        # update the train_indices
+        self.train_indices = np.concatenate((self.train_indices, np.asarray(self.candidate_indices)), 0)
+
         # update the left_over_indices.
         self.left_over_indices = [item for item in self.left_over_indices if item not in self.candidate_indices]
 
+        self.left_over_indices = np.asarray(self.left_over_indices)
 
+        # make sure there are no overlapping indices between training and testing
+        assert len(np.intersect1d(np.asarray(self.left_over_indices), np.asarray(self.train_indices))) == 0
 
     def train_model(self):
         '''
@@ -99,6 +129,8 @@ class activeLearner():
         # train the model
         for i in range(1):#self.opts.epoch):
 
+            self.model.train()
+
             for image, label in self.trainloader:
                 # zero out the gradient
                 optimizer.zero_grad()
@@ -110,13 +142,11 @@ class activeLearner():
                 loss.backward()
                 optimizer.step()
 
-
-
             # Validation
 
             correct = 0
             total = 0
-
+            self.model.eval()
             for image, label in self.validloader:
 
 

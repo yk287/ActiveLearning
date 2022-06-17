@@ -29,7 +29,8 @@ class options():
         self.parser.add_argument('--initial_n', type=int, nargs='?', default=100, help='number of labelled data to start with')
         self.parser.add_argument('--total_data', type=int, nargs='?', default=5000, help='number of labelled data to start with')
         self.parser.add_argument('--n_addition', type=int, nargs='?', default=50, help='number of labelled data to start with')
-
+        self.parser.add_argument('--random_select', type=bool, nargs='?', default=False,
+                                 help='whether to randomly select next batch')
 
         #Discriminator Options
         self.parser.add_argument('--D_hidden', type=int, nargs='+', default=[256, 256], help='hidden layer configuration in a list form for D')
