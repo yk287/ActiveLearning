@@ -9,7 +9,7 @@ class options():
         # experiment specifics
 
         # Training Options
-        self.parser.add_argument('--epoch', type=int, nargs='?', default=5, help='total number of training episodes')
+        self.parser.add_argument('--epoch', type=int, nargs='?', default=1, help='total number of training episodes')
         self.parser.add_argument('--show_every', type=int, nargs='?', default=500, help='How often to show images')
         self.parser.add_argument('--print_every', type=int, nargs='?', default=250, help='How often to print scores')
         self.parser.add_argument('--print_model', type=bool, nargs='?', default=True, help='Prints the model being used')
@@ -27,11 +27,14 @@ class options():
         # Active Learning Options
         self.parser.add_argument('--dropout_iters', type=int, nargs='?', default=10, help='Number of dropout iterations')
         self.parser.add_argument('--initial_n', type=int, nargs='?', default=100, help='number of labelled data to start with')
-        self.parser.add_argument('--total_data', type=int, nargs='?', default=5000, help='number of labelled data to start with')
+        self.parser.add_argument('--total_data', type=int, nargs='?', default=15000, help='number of labelled data to start with')
+        self.parser.add_argument('--total_training_step', type=int, nargs='?', default=5,
+                                 help='total number of active learning steps to take')
         self.parser.add_argument('--n_addition', type=int, nargs='?', default=50, help='number of labelled data to start with')
         self.parser.add_argument('--random_select', type=bool, nargs='?', default=False,
                                  help='whether to randomly select next batch')
-
+        self.parser.add_argument('--AL_methods', type=str, nargs='?', default='LC',
+                                 help='which methods to use. read README to see supported methods')
         #Discriminator Options
         self.parser.add_argument('--D_hidden', type=int, nargs='+', default=[256, 256], help='hidden layer configuration in a list form for D')
         self.parser.add_argument('--D_activation', type=str, nargs='?', default='lrelu', help='Activation function for the discriminator')

@@ -15,7 +15,6 @@ import numpy as np
 
 from sklearn.model_selection import train_test_split
 
-
 class activeLearner():
 
     def __init__(self, opts):
@@ -24,6 +23,11 @@ class activeLearner():
 
         self.pick_initial_n()
         self.init_dataloader()
+
+        self.data_size = []
+        self.train_accuracy = []
+        self.valid_accuracy = []
+
 
     def pick_initial_n(self):
 
@@ -67,7 +71,10 @@ class activeLearner():
 
     def AL_train(self):
 
-        for i in range(10):
+        # to make sure we don't iterate on labeling more than we have data.
+        num_steps = min(self.opts.total_training_step, (self.opts.total_data - self.opts.initial_n) // self.opts.n_addition)
+
+        for i in range(num_steps):
             # initial train
             self.train_model()
             # update the train and test indices by updating indices
@@ -77,29 +84,41 @@ class activeLearner():
 
     def find_candidates(self):
 
-        if not self.opts.random_select:
-            # placeholder
-            results = torch.zeros((0))
+        # placeholder
+        results = torch.zeros((0))
+
+        if self.opts.AL_methods != 'RANDOM':
 
             for image, label in self.validloader:
 
-                # get the criteria for acquisition function.
-                result = self.model.n_dropout_max_entropy(image.to(device)).detach()
+                # least confident
+                if self.opts.AL_methods == 'LC':
+                    result = self.model.get_least_confident(image.to(device)).detach()
+
+                elif self.opts.AL_methods == 'DROPOUT_LC':
+                    # get the criteria for acquisition function.
+                    result = self.model.n_dropout_least_confident(image.to(device)).detach()
+
+                elif self.opts.AL_methods == 'MAX_ENTROPY':
+                    result = self.model.get_max_entropy(image.to(device)).detach()
+
+                elif self.opts.AL_methods == 'DROPOUT_MAX_ENTROPY':
+                    # get the criteria for acquisition function.
+                    result = self.model.n_dropout_max_entropy(image.to(device)).detach()
+
+                else:
+                    print("Wrong Method Selected")
 
                 # append the data
                 results = torch.concat((results, result.cpu()), dim = 0)
 
-            # get a new set of candidates
-            self.candidate_indices = torch.argsort(results, descending=True)#[:self.opts.n_addition].tolist()
-            self.candidate_indices = self.candidate_indices.tolist()[:self.opts.n_addition]
+                # get a new set of candidates
+                self.candidate_indices = torch.argsort(results, descending=True)#[:self.opts.n_addition].tolist()
+                self.candidate_indices = self.candidate_indices.tolist()[:self.opts.n_addition]
 
         else:
-
             perm = torch.randperm(len(self.left_over_indices))
             self.candidate_indices = perm[:self.opts.n_addition]
-
-            #self.candidate_indices = self.left_over_indices[idx]
-
 
         # candidate_indices represent the data that should be added to the train_dataset
         self.candidate_indices = self.left_over_indices[self.candidate_indices]
@@ -121,15 +140,20 @@ class activeLearner():
         :return:
         '''
 
-        self.model = discriminator(self.opts)
+        self.model = discriminator(self.opts).to(device)
 
         optimizer = torch.optim.Adam(self.model.parameters(), lr = self.opts.lr, betas=(self.opts.beta1, self.opts.beta2))
         criterion = torch.nn.CrossEntropyLoss()
 
+        self.data_size.append(len(self.trainloader))
+
         # train the model
-        for i in range(1):#self.opts.epoch):
+        for i in range(self.opts.epoch):
 
             self.model.train()
+
+            correct = 0
+            total = 0
 
             for image, label in self.trainloader:
                 # zero out the gradient
@@ -142,13 +166,21 @@ class activeLearner():
                 loss.backward()
                 optimizer.step()
 
+                pred = torch.argmax(probs, dim=1)
+
+                correct += torch.sum((pred == label.to(device)) * 1.0)
+                total += len(pred)
+
+            self.train_accuracy.append(float(correct / total))
+
             # Validation
 
             correct = 0
             total = 0
-            self.model.eval()
-            for image, label in self.validloader:
 
+            self.model.eval()
+
+            for image, label in self.validloader:
 
                 # pred
                 probs = self.model(image.to(device))
@@ -157,6 +189,8 @@ class activeLearner():
 
                 correct += torch.sum((pred == label.to(device)) * 1.0)
                 total += len(pred)
+
+            self.valid_accuracy.append(float(correct / total))
 
             print("Valid Accuracy: ", float(correct / total))
 
